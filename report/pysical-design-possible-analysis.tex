@@ -1,0 +1,237 @@
+All 1:N relationships can be implemented by one of the following solutions:
+\begin{enumerate}
+    \item adding a foreign key in the table of the "N" side referencing the "1" side,
+    \item adding a reference attribute to the "1" side in the table of the "N" side (solution code 1:N(REF)),
+    \item realizing a collection (of references) to the "N" side in the table of the "1" side (solution code 1(COL):N).
+    \item implementing solutions 2 and 3 (solution code 1(COL):N(REF)). 
+\end{enumerate}
+All N:M relationships can be implemented by one of the following solutions:
+\begin{enumerate}
+    \item realizing a collection (of references) to the "N" side in the table of the "M" side (solution code N(COL):M) or vice versa (solution code N:M(COL)) or both (solution code N(COL):M(COL)).
+    \item realizing a separate table for the relationship with foreign keys (that could be both OIDs or primary keys) referencing the two sides (solution code N:(REFs):M).
+\end{enumerate}%
+%
+The collection attributes, in Oracle, could be implemented as nested tables (implementation of the \texttt{MULTISET} of SQL standard) or \texttt{VARRAY}s. The code of these different solutions will replace COL with NT for nested tables and with VAR for \texttt{VARRAY}s, so for example solution 1(COL):N will be implemented as solution 1(NT):N if we use nested tables and as solution 1(VAR):N if we use \texttt{VARRAY}s. The choice between nested tables and \texttt{VARRAY}s will be made based on the estimated volumes of the relationships, since if we expect a large number of tuples related to each other, then we should prefer nested tables stored out-of-line, while if we expect a small number of tuples related to each other, then we can prefer \texttt{VARRAY}s stored in-line since they are more efficient than nested tables for small collections. 
+
+In order to manage the exponential number of possible combinations of solutions for the different relationships, we will:
+\begin{enumerate}
+    \item first analyze pros and cons of implementing a general 1(COL):N solution versus a general 1:N(REF) solution, without considering the specific implementations of the 1(COL):N solution. This is possible since the nested table solution always have an additional read and write access to the collection table compared to the \texttt{VARRAY} solution. Thus by considering only the common accesses between all 1(COL):N solutions, we are considering a lower bound for the cost of all 1(COL):N solutions that, in order to be more advantageous than the 1:N(REF) solution, must be lower than the cost of the 1:N(REF) solution. If this lower bound is already higher than the cost of the 1:N(REF) solution, then we can directly exclude all 1(COL):N solutions without needing to analyze them one by one.
+    \item then analyze pros and cons of the different implementations of the 1(COL):N solution, that is the nested table solution and the \texttt{VARRAY} solution, based on the estimated volumes of the relationships, in order to choose the best implementation for each relationship.
+\end{enumerate}
+
+Since we are using Oracle (that is an object relational database), we simply ignore the first solution, that is the one used in purely relational databases and we will focus on analyzing pros and cons of the second and third solution, with regards to the most common operations with their frequencies per day, for each of the preceding relationships. The fourth solution has the same time complexity of the third solution while wasting more space, so we will not usually consider it in our analysis if no special specific needs arise that would make it more convenient than the third solution.
+
+In this section we will analyze how different physical implementations would affect the performance of the most common operations on the database and then we will make a final decision on which is the best physical design for our database. Throughout the analysis of read/write accesses, we will assume that a write access is twice as expensive as a read access. So write accesses will correspond to 2 units of cost, while read accesses will correspond to 1 unit of cost.
+
+\subsection{Table of Volumes}
+
+% longtable version for page splitting
+\begin{longtable}{|c|c|p{8cm}|}
+    \hline
+    \textbf{Table} & \textbf{Volume} & \textbf{Why} \\
+    \hline
+    \endfirsthead
+    \hline
+    \textbf{Table} & \textbf{Volume} & \textbf{Why} \\
+    \hline
+    \endhead
+    \texttt{Teams} & 100 & By specifications of the use case \\
+    \texttt{Members} & 1000 & Since by specifications of the use case, each team has on average 10 members then $100 \times 10 = 1000$ \\
+    \texttt{EventLocations} & 1000 & By specifications \\ % Assuming that each customer organizes on average 10 events, then $100 \times 10 = 1000$ \\
+    \texttt{Bookings} & 5000 & Assuming that each event location has on average 5 bookings, then $1000 \times 5 = 5000$ \\
+    \texttt{RecurrentBookings} & 1000 & Assuming that the 20\% of bookings are recurrent, then $5000 \times 0.2 = 1000$ \\
+    \texttt{Customers} & 100 & Assuming that each customer organizes on average 10 event locations, then $1000 / 10 = 100$ \\
+    \texttt{Installations} & 50 & Assuming that each installation has on average 10 booking instances, then $500 / 10 = 50$ \\
+    \texttt{Promos} & 10 & Assuming that the 20\% of installations are promos, then $50 \times 0.2 = 10$ \\
+    \texttt{Depots} & 10 & Assuming that each depot has on average 10 teams then $100 / 10 = 10$ \\
+    \texttt{CentralOffices} & 1 & By specifications of the use case \\
+    \hline
+    \caption{Estimated volumes of the tables}
+    \label{tab:volumes}
+\end{longtable}
+
+\subsection{Tables of Accesses}
+
+\subsubsection{Operation \ref{op1}}
+
+\begin{longtable}[H]{|c|c|p{1cm}|p{2cm}|p{8cm}|}
+    \hline
+    \textbf{Table} & \textbf{Acc.} & \textbf{Acc. Type} & \textbf{Accesses of solution} & \textbf{Why} \\
+    \hline
+    \texttt{Customers} & 1 & Write & All & Simply write the new customer tuple \\
+    \hline
+\end{longtable}
+
+The total cost of the operation is thus $1 \times 2 = 2$ units of cost, since we have only one write access to the \texttt{Customers} table, while the daily load cost for this operation is $2 \times 10 = 20$ units of cost per day, since this operation is performed 10 times per day.
+
+\subsubsection{Operation \ref{op2}}
+
+For the operation \ref{op2} of recording a new booking, we will assume to already have in input the following data:
+\begin{itemize}
+    \item the id of the customer who wants to place a booking,
+    \item the id of the event location where the booked installation would take place
+    \item the id of the team that will manage the booking
+    \item the id of the installation that will be booked
+\end{itemize}
+
+\begin{longtable}[H]{|c|c|p{1cm}|p{2cm}|p{8cm}|}
+    \hline
+    \textbf{Table} & \textbf{Acc.} & \textbf{Acc. Type} & \textbf{Accesses of solution} & \textbf{Why} \\
+    \hline
+    \texttt{Bookings} & 1 & Write & All & To simply write the booking tuple \\
+    \hline
+    \texttt{Customers} & 1 & Write & 1(COL):N on \texttt{places} & We need to update the collection of bookings of the customer if we implement the \texttt{places} relationship with a collection \\
+    \hline
+    \texttt{EventLocations} & 1 & Write & 1(COL):N on \texttt{needs} & We need to update the collection of bookings of the event location if we implement the \texttt{needs} relationship with a collection \\
+    \hline
+    \texttt{Teams} & 1 & Write & 1(COL):N on \texttt{manages} & We need to update the collection of bookings of the team if we implement the \texttt{manages} relationship with a collection \\
+    \hline
+    \texttt{Installations} & 1 & Write & 1(COL):N on \texttt{instance of} & We need to update the collection of bookings of the installation if we implement the \texttt{instance of} relationship with a collection \\
+    \hline
+\end{longtable}
+
+\paragraph{Summary of Solutions}
+
+The following table summarizes the total number of read and write accesses for each combination of solutions on the \texttt{needs}, \texttt{manages}, \texttt{places}, and \texttt{instance of} relationships (considering the base write to \texttt{Bookings}):
+
+\begin{longtable}[H]{|c|c|c|c|c|c|c|c|}
+    \hline
+    \textbf{\texttt{needs}} & \textbf{\texttt{manages}} & \textbf{\texttt{places}} & \textbf{\texttt{instance of}} & \textbf{Reads} & \textbf{Writes} & \textbf{Unit Cost} & \textbf{Daily Cost} \\
+    \hline
+    \endfirsthead
+    \hline
+    \textbf{\texttt{needs}} & \textbf{\texttt{manages}} & \textbf{\texttt{places}} & \textbf{\texttt{instance of}} & \textbf{Reads} & \textbf{Writes} & \textbf{Unit Cost} & \textbf{Daily Cost} \\
+    \hline
+    \endhead
+    1(COL):N & 1(COL):N & 1(COL):N & 1(COL):N & 0 & 5 & 10 & $10 \times 300 = 3000 $ \\
+    \hline
+    1(COL):N & 1(COL):N & 1(COL):N & 1:N(REF) & 0 & 4 & 8 & $8 \times 300 = 2400 $ \\
+    \hline
+    1(COL):N & 1(COL):N & 1:N(REF) & 1(COL):N & 0 & 4 & 8 & $8 \times 300 = 2400 $ \\
+    \hline
+    1(COL):N & 1(COL):N & 1:N(REF) & 1:N(REF) & 0 & 3 & 6 & $6 \times 300 = 1800 $ \\
+    \hline
+    1(COL):N & 1:N(REF) & 1(COL):N & 1(COL):N & 0 & 4 & 8 & $8 \times 300 = 2400 $ \\
+    \hline
+    1(COL):N & 1:N(REF) & 1(COL):N & 1:N(REF) & 0 & 3 & 6 & $6 \times 300 = 1800 $ \\
+    \hline
+    1(COL):N & 1:N(REF) & 1:N(REF) & 1(COL):N & 0 & 3 & 6 & $6 \times 300 = 1800 $ \\
+    \hline
+    1(COL):N & 1:N(REF) & 1:N(REF) & 1:N(REF) & 0 & 2 & 4 & $4 \times 300 = 1200 $ \\
+    \hline
+    1:N(REF) & 1(COL):N & 1(COL):N & 1(COL):N & 0 & 4 & 8 & $8 \times 300 = 2400 $ \\
+    \hline
+    1:N(REF) & 1(COL):N & 1(COL):N & 1:N(REF) & 0 & 3 & 6 & $6 \times 300 = 1800 $ \\
+    \hline
+    1:N(REF) & 1(COL):N & 1:N(REF) & 1(COL):N & 0 & 3 & 6 & $6 \times 300 = 1800 $ \\
+    \hline
+    1:N(REF) & 1(COL):N & 1:N(REF) & 1:N(REF) & 0 & 2 & 4 & $4 \times 300 = 1200 $ \\
+    \hline
+    1:N(REF) & 1:N(REF) & 1(COL):N & 1(COL):N & 0 & 3 & 6 & $6 \times 300 = 1800 $ \\
+    \hline
+    1:N(REF) & 1:N(REF) & 1(COL):N & 1:N(REF) & 0 & 2 & 4 & $4 \times 300 = 1200 $ \\
+    \hline
+    1:N(REF) & 1:N(REF) & 1:N(REF) & 1(COL):N & 0 & 2 & 4 & $4 \times 300 = 1200 $ \\
+    \hline
+    1:N(REF) & 1:N(REF) & 1:N(REF) & 1:N(REF) & 0 & 1 & 2 & $2 \times 300 = 600 $ \\
+    \hline
+    \caption{Summary of total costs for each solution combination in Operation \ref{op2}}
+    \label{tab:op2-summary}
+\end{longtable}
+
+\subsubsection{Operation \ref{op3}}
+
+For the operation \ref{op3} of registering a new event location, we will assume to already have in input the id of the customer that owns the event location.
+
+\begin{longtable}[H]{|c|c|p{1cm}|p{2cm}|p{8cm}|}
+    \hline
+    \textbf{Table} & \textbf{Acc.} & \textbf{Acc. Type} & \textbf{Accesses of solution} & \textbf{Why} \\
+    \hline
+    \texttt{EventLocations} & 1 & Write & All & Simply write the new event location tuple \\
+    \hline
+    \texttt{Customers} & 1 & Write & 1(COL):N on \texttt{organizes} & We need to update the collection of event locations of the customer if we implement the \texttt{organizes} relationship with a collection \\
+    \hline
+\end{longtable}
+
+\paragraph{Summary of solutions}
+
+The total cost for the operation \ref{op3} is thus:
+\begin{itemize}
+    \item $1 \times 2 = 2$ units of cost and $2 \times 50 = 100$ units of cost per day for solution 1:N(REF) on \texttt{organizes}
+    \item $2 \times 2 = 4$ and $4 \times 50 = 200$ units of cost per day for solution 1(COL):N on \texttt{organizes}
+\end{itemize}
+
+\subsubsection{Operation \ref{op4}}
+
+For the operation \ref{op4}, we will assume to already have in input the id of the event location.
+
+\begin{longtable}[H]{|c|p{1cm}|p{1cm}|p{2cm}|p{8cm}|}
+    \hline
+    \textbf{Table} & \textbf{Acc.} & \textbf{Acc. Type} & \textbf{Accesses of solution} & \textbf{Why} \\
+    \hline
+    \texttt{EventLocations} & 1 & Read & 1(COL):N on \texttt{needs} & To find the bookings for the given event location we need to read the event location tuple to have access to the collection of its related bookings \\
+    \hline
+    \texttt{Bookings} & 5 & Read & 1(COL):N on \texttt{needs} & Since we have used the collection, we read only strictly related \texttt{Bookings} tuples \\
+    \hline
+    \texttt{Bookings} & 5000 & Read & 1:N(REF) on \texttt{needs} & In this case there is no quick way to find the bookings for the given event location, we must scan all booking tuples selecting those that reference the event location given in input \\
+    \hline
+    \texttt{Teams} & 100 & Read & 1(COL):N on \texttt{manages} & For each booking, in this case, there is no quick way to find the team that manages it, we must scan \texttt{Teams} selecting those tuples that reference the given booking \\
+    \hline
+    \texttt{Teams} & 5 & Read & 1:N(REF) on \texttt{manages} & Since, for each booking, we have a reference attribute pointing to the team that manages it \\
+    \hline
+\end{longtable}
+
+\paragraph{Summary of Solutions}
+
+The following table summarizes the total number of read and write accesses for each combination of solutions on the \texttt{needs} and \texttt{manages} relationships:
+
+\begin{longtable}[H]{|c|c|c|c|c|}
+    \hline
+    \textbf{Solution on \texttt{needs}} & \textbf{Solution on \texttt{manages}} & \textbf{Reads} & \textbf{Writes} & \textbf{Total Cost} \\
+    \hline
+    \endfirsthead
+    \hline
+    \textbf{Solution on \texttt{needs}} & \textbf{Solution on \texttt{manages}} & \textbf{Reads} & \textbf{Writes} & \textbf{Total Cost} \\
+    \hline
+    \endhead
+    1(COL):N & 1(COL):N & 106 & 0 & 106 \\
+    \hline
+    1(COL):N & 1:N(REF) & 11 & 0 & 11 \\
+    \hline
+    1:N(REF) & 1(COL):N & 5100 & 0 & 5100 \\
+    \hline
+    1:N(REF) & 1:N(REF) & 5005 & 0 & 5005 \\
+    \hline
+    \caption{Summary of total costs for each solution combination in Operation \ref{op4}}
+    \label{tab:op4-summary}
+\end{longtable}
+
+\subsubsection{Operation \ref{op5}}
+
+Indipendently of how we choose to implement the \texttt{needs} relationship, we need to read all \texttt{EventLocations} tuples and all \texttt{Bookings} tuples, since we need to count the number of bookings for each event location and then sort the event locations by this count. The way in which we implement the \texttt{needs} relationship does not affect the number of accesses, it simply affects from which table we start the scan and aggregation process to count the number of bookings for each event location. 
+
+If we implement the \texttt{needs} relationship with solution 1(COL):N, we can start from the \texttt{EventLocations} table and for each event location we can read the collection of bookings related to it and count its cardinality, while if we implement the \texttt{needs} relationship with solution 1:N(REF), we need to start from the \texttt{Bookings} table and for each booking we need to read the event location it references in order to count the number of bookings for each event location.
+
+Also the space complexities are the same since both of them requires a dictionary to store the count of bookings for each event location, that is a dictionary of size equal to the number of event locations.
+
+The following table summarizes the costs for this operation:
+
+\begin{longtable}[H]{|c|p{1cm}|p{1cm}|p{2cm}|}
+    \hline
+    \textbf{Table} & \textbf{Acc.} & \textbf{Acc. Type} & \textbf{Accesses of solution} \\
+    \hline
+    \texttt{EventLocations} & 1000 & Read & All \\
+    \hline
+    \texttt{Bookings} & 5000 & Read & All\\
+    \hline
+\end{longtable}
+
+So the total cost for this operation is $6000$ units of cost, independently of the solution chosen for the \texttt{needs} relationship.
+
+\subsection{Final Implementation Considerations}
+
+As we can easily notice the overall daily load of this database is mainly dominated by interactive write operations (i.e. Operations \ref{op1}, \ref{op2} and \ref{op3}) rather than by read operations, since the most expensive read operations are performed orders of magnitude less frequently than the write operations. Thus, we should focus on optimizing the performance of write operations rather than read operations, even if we have to pay a higher cost for some read operations, since they are performed less frequently.
+
+Following this objective we implemented all 1:N relationships involving the \texttt{Bookings} table (\texttt{places}, \texttt{needs}, \texttt{instance of}, \texttt{manages}) with solution 1:N(REF), since the \texttt{Bookings} table is the one involved in the most expensive write operation (Operation \ref{op2}) and thus we want to minimize the number of accesses for this operation. With the same rationale we decided to implement the \texttt{organizes} relationship with solution 1:N(REF) since it is involved in the second most expensive write operation (Operation \ref{op3}). However, since implementing the \texttt{needs} relationship with solution 1:N(REF) would be too expensive for Operation \ref{op4}, we decided also to create a B-Tree index on the event location reference attribute in the \texttt{Bookings} table, so that we can quickly find all bookings for a given event location without needing to scan all booking tuples. This index will also improve performances of Operation \ref{op5} since it will allow us to quickly group bookings by event location and count the number of bookings for each event location.
+
+The other relationships, instead, are implemented with solution 1(COL):N since they are not involved in expensive write operations and thus we can afford to pay a higher cost for them in order to optimize read operations that are performed more frequently than write operations.

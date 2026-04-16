@@ -1,0 +1,39 @@
+\documentclass{article}
+\usepackage[a4paper, margin=1in]{geometry}
+
+\usepackage{graphicx}
+\usepackage{float}
+\usepackage{longtable}
+\usepackage{hyperref}
+\usepackage{listings}
+\usepackage{minted}
+
+
+% Configure minted style globally
+\setminted{
+    breaklines,
+    bgcolor=white,
+    fontsize=\small,
+    frame=single,
+    framerule=0.5pt
+}
+
+\title{Database Design and Implementation}
+\author{Nicolò Resta}
+\date{\today}
+
+\begin{document}
+
+\maketitle
+
+\tableofcontents
+\newpage
+
+\input{use-case.tex}
+\input{analysis.tex}
+\input{conceptual-design.tex}
+\input{logical-design.tex}
+\input{physical-design.tex}
+\input{webapp.tex}
+
+\end{document}

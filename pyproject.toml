@@ -1,0 +1,16 @@
+[project]
+name = "db-project"
+version = "0.1.0"
+description = "A population script for the database using Faker"
+readme = "README_populate.md"
+requires-python = ">=3.8"
+dependencies = [
+    "Faker",
+    "flask",
+    "oracledb",
+    "dotenv"
+]
+
+# [build-system]
+# requires = ["hatchling"]
+# build-backend = "hatchling.build"

@@ -1,0 +1,8 @@
+{
+  "recommendations": [
+    "oracle.sql-developer"
+  ],
+//   "unwantedRecommendations": [
+//     "davidanson.vscode-markdownlint"
+//   ]
+}

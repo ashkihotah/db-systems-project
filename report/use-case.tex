@@ -1,0 +1,17 @@
+\section{Use Case Requirements}
+
+\subsection{Stage Up Inc.}
+
+The company "StageUp" has a central office and several operational depots located across the world, each covering a specific region, which consists of one or more municipalities, where they manage the rental and installation of audiovisual equipment for events. The central office does not handle physical setups. Both the central office and depots are characterized by name, address, city/province, and number of employees. Bookings, either recurring or one-time, are coordinated by the central office. Bookings can be placed by customers via phone, postal mail, email, or through the website. Besides one-time bookings, the company also handles seasonal contracts and special promotional rentals. Bookings are delivered and installed at customer event locations, which are characterized by address, house number, postal code, city, and province. Since each customer can have one or more event locations, each address is identified by a unique code within the customer's profile. Additionally, each event location has a setup time estimate and equipment capacity. Depots have one or more setup teams, each with a maximum number of members. Each team is characterized by an identification code, a name, the number of installations made, and some personal data of its team members. Each booking is characterized by type, date, duration, cost, the team that handled it, and the details of the customer who placed it. Customers, classified as individuals or companies, are identified by an alphanumeric code and their personal details.
+
+\subsection{Common Operations}
+
+The most common operations on the database are the following:
+\begin{enumerate}
+    \item Enter all data related to a new customer (10 times per day) \label{op1}
+    \item Record a new booking (300 times per day) \label{op2}
+    \item Register a new event location (50 times per day) \label{op3}
+    \item View the team that handled setups at a specific event location (20 times per day) \label{op4}
+    \item Print a list of event locations sorted in descending order by the number of bookings handled at each location (5 times per day) \label{op5}
+\end{enumerate}
+

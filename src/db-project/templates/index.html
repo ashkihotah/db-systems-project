@@ -1,0 +1,298 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DB Project Dashboard</title>
+    <!-- Bootstrap 5 CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        .dashboard-section { margin-bottom: 2rem; }
+    </style>
+</head>
+<body class="bg-light pb-5">
+    
+    <nav class="navbar navbar-expand-lg navbar-dark bg-primary mb-4 shadow">
+      <div class="container">
+        <a class="navbar-brand fw-bold" href="#">Dashboard DB</a>
+      </div>
+    </nav>
+
+    <div class="container">
+        <div class="text-center mb-5">
+            <h1 class="display-5 text-secondary">DB Project Operations</h1>
+            <p class="lead text-muted">Manage customers, events, and bookings.</p>
+        </div>
+        
+        {% with messages = get_flashed_messages(with_categories=true) %}
+          {% if messages %}
+            {% for category, message in messages %}
+              <div class="alert alert-{% if category == 'error' %}danger{% else %}{{ category }}{% endif %} alert-dismissible fade show" role="alert">
+                {{ message }}
+                <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+              </div>
+            {% endfor %}
+          {% endif %}
+        {% endwith %}
+
+        <div class="row g-4">
+            <!-- Individual Customer -->
+            <div class="col-md-6 dashboard-section">
+                <div class="card shadow-sm h-100 border-0">
+                    <div class="card-header bg-white border-bottom-0 pt-4 pb-0">
+                        <h2 class="h4 text-primary"><i class="bi bi-person-plus"></i> Add Individual Customer</h2>
+                    </div>
+                    <div class="card-body">
+                        <form action="/add_individual_customer" method="POST">
+                            <div class="mb-3">
+                                <label class="form-label text-muted small fw-bold">Code</label>
+                                <input type="text" name="code" class="form-control" placeholder="12345" required>
+                            </div>
+                            <div class="row mb-3">
+                                <div class="col">
+                                    <label class="form-label text-muted small fw-bold">Name</label>
+                                    <input type="text" name="name" class="form-control" placeholder="John" required>
+                                </div>
+                                <div class="col">
+                                    <label class="form-label text-muted small fw-bold">Surname</label>
+                                    <input type="text" name="surname" class="form-control" placeholder="Doe" required>
+                                </div>
+                            </div>
+                            <div class="row mb-3">
+                                <div class="col">
+                                    <label class="form-label text-muted small fw-bold">Email</label>
+                                    <input type="email" name="email" class="form-control" placeholder="example@mail.com">
+                                </div>
+                                <div class="col">
+                                    <label class="form-label text-muted small fw-bold">Phone</label>
+                                    <input type="text" name="phone" class="form-control" placeholder="+123456789">
+                                </div>
+                            </div>
+                            <div class="row mb-3">
+                                <div class="col">
+                                    <label class="form-label text-muted small fw-bold">Date of Birth</label>
+                                    <input type="date" name="dob" class="form-control" required>
+                                </div>
+                                <div class="col">
+                                    <label class="form-label text-muted small fw-bold">Gender</label>
+                                    <select name="gender" class="form-select" required>
+                                        <option value="">Select</option>
+                                        <option value="M">Male</option>
+                                        <option value="F">Female</option>
+                                        <option value="Other">Other</option>
+                                    </select>
+                                </div>
+                            </div>
+                            <button type="submit" class="btn btn-primary w-100 mt-2">Add Individual Customer</button>
+                        </form>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Company Customer -->
+            <div class="col-md-6 dashboard-section">
+                <div class="card shadow-sm h-100 border-0">
+                    <div class="card-header bg-white border-bottom-0 pt-4 pb-0">
+                        <h2 class="h4 text-success"><i class="bi bi-building-add"></i> Add Company Customer</h2>
+                    </div>
+                    <div class="card-body">
+                        <form action="/add_company_customer" method="POST">
+                            <div class="mb-3">
+                                <label class="form-label text-muted small fw-bold">Code</label>
+                                <input type="text" name="code" class="form-control" required>
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label text-muted small fw-bold">Company Name</label>
+                                <input type="text" name="company_name" class="form-control" required>
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label text-muted small fw-bold">VAT Number</label>
+                                <input type="text" name="vat_number" class="form-control" required>
+                            </div>
+                            <div class="row mb-3">
+                                <div class="col">
+                                    <label class="form-label text-muted small fw-bold">Email</label>
+                                    <input type="email" name="email" class="form-control">
+                                </div>
+                                <div class="col">
+                                    <label class="form-label text-muted small fw-bold">Phone</label>
+                                    <input type="text" name="phone" class="form-control">
+                                </div>
+                            </div>
+                            <button type="submit" class="btn btn-success w-100 mt-2">Add Company Customer</button>
+                        </form>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Event Location -->
+            <div class="col-md-12 dashboard-section">
+                <div class="card shadow-sm border-0">
+                    <div class="card-header bg-white border-bottom-0 pt-4 pb-0">
+                        <h2 class="h4 text-info"><i class="bi bi-geo-alt"></i> Add Event Location</h2>
+                    </div>
+                    <div class="card-body">
+                        <form action="/add_event_location" method="POST">
+                            <div class="row mb-3">
+                                <div class="col-md-3">
+                                    <label class="form-label text-muted small fw-bold">Region</label>
+                                    <input type="text" name="region" class="form-control" required>
+                                </div>
+                                <div class="col-md-3">
+                                    <label class="form-label text-muted small fw-bold">Province</label>
+                                    <input type="text" name="province" class="form-control" required>
+                                </div>
+                                <div class="col-md-3">
+                                    <label class="form-label text-muted small fw-bold">City</label>
+                                    <input type="text" name="city" class="form-control" required>
+                                </div>
+                                <div class="col-md-3">
+                                    <label class="form-label text-muted small fw-bold">Postal Code</label>
+                                    <input type="text" name="postal_code" class="form-control" required>
+                                </div>
+                            </div>
+                            <div class="row mb-3">
+                                <div class="col-md-8">
+                                    <label class="form-label text-muted small fw-bold">Address</label>
+                                    <input type="text" name="address" class="form-control" required>
+                                </div>
+                                <div class="col-md-4">
+                                    <label class="form-label text-muted small fw-bold">House N.</label>
+                                    <input type="text" name="house_number" class="form-control" required>
+                                </div>
+                            </div>
+                            <div class="row mb-4">
+                                <div class="col-md-4">
+                                    <label class="form-label text-muted small fw-bold">Setup Time Est. (hours)</label>
+                                    <input type="number" name="setup_time_estimate" class="form-control" required>
+                                </div>
+                                <div class="col-md-4">
+                                    <label class="form-label text-muted small fw-bold">EQ Capacity</label>
+                                    <input type="number" name="eq_capacity" class="form-control" required>
+                                </div>
+                                <div class="col-md-4">
+                                    <label class="form-label text-muted small fw-bold">Customer Code (Must exist)</label>
+                                    <input type="text" name="customer_code" class="form-control" required>
+                                </div>
+                            </div>
+                            <button type="submit" class="btn btn-info text-white w-100">Add Event Location</button>
+                        </form>
+                    </div>
+                </div>
+            </div>
+
+            <!-- One Time Booking -->
+            <div class="col-md-6 dashboard-section">
+                <div class="card shadow-sm h-100 border-0">
+                    <div class="card-header bg-white border-bottom-0 pt-4 pb-0">
+                        <h2 class="h4 text-warning"><i class="bi bi-calendar-event"></i> Add One-Time Booking</h2>
+                    </div>
+                    <div class="card-body">
+                        <form action="/add_one_time_booking" method="POST">
+                            <div class="row mb-3">
+                                <div class="col">
+                                    <label class="form-label text-muted small fw-bold">Date</label>
+                                    <input type="date" name="booking_date" class="form-control" required>
+                                </div>
+                                <div class="col">
+                                    <label class="form-label text-muted small fw-bold">Duration (hrs)</label>
+                                    <input type="number" name="duration" class="form-control" required>
+                                </div>
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label text-muted small fw-bold">Team</label>
+                                <select name="team_name" class="form-select" required>
+                                    <option value="">-- Select Team --</option>
+                                    {% for team in teams %}
+                                    <option value="{{ team }}">{{ team }}</option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label text-muted small fw-bold">Installation Name</label>
+                                <input type="text" name="installation_name" class="form-control" required>
+                            </div>
+                            <div class="mb-4">
+                                <label class="form-label text-muted small fw-bold">Event Location Code</label>
+                                <input type="number" name="event_location_code" class="form-control" required>
+                            </div>
+                            <button type="submit" class="btn btn-warning w-100 mt-auto">Add One-Time Booking</button>
+                        </form>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Recurrent Booking -->
+            <div class="col-md-6 dashboard-section">
+                <div class="card shadow-sm h-100 border-0">
+                    <div class="card-header bg-white border-bottom-0 pt-4 pb-0">
+                        <h2 class="h4 text-danger"><i class="bi bi-calendar-range"></i> Add Recurrent Booking</h2>
+                    </div>
+                    <div class="card-body">
+                        <form action="/add_recurrent_booking" method="POST">
+                            <div class="row mb-3">
+                                <div class="col">
+                                    <label class="form-label text-muted small fw-bold">Start Date</label>
+                                    <input type="date" name="booking_date" class="form-control" required>
+                                </div>
+                                <div class="col">
+                                    <label class="form-label text-muted small fw-bold">Duration (hrs)</label>
+                                    <input type="number" name="duration" class="form-control" required>
+                                </div>
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label text-muted small fw-bold">Team</label>
+                                <select name="team_name" class="form-select" required>
+                                    <option value="">-- Select Team --</option>
+                                    {% for team in teams %}
+                                    <option value="{{ team }}">{{ team }}</option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+                            <div class="row mb-3">
+                                <div class="col">
+                                    <label class="form-label text-muted small fw-bold">Installation Name</label>
+                                    <input type="text" name="installation_name" class="form-control" required>
+                                </div>
+                                <div class="col">
+                                    <label class="form-label text-muted small fw-bold">Location Code</label>
+                                    <input type="number" name="event_location_code" class="form-control" required>
+                                </div>
+                            </div>
+                            <div class="row mb-4">
+                                <div class="col">
+                                    <label class="form-label text-muted small fw-bold">Interval (days)</label>
+                                    <input type="number" name="interval" class="form-control" required>
+                                </div>
+                                <div class="col">
+                                    <label class="form-label text-muted small fw-bold">N. of Times</label>
+                                    <input type="number" name="n_times" class="form-control" required>
+                                </div>
+                            </div>
+                            <button type="submit" class="btn btn-danger w-100 mt-auto">Add Recurrent Booking</button>
+                        </form>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Quick Links -->
+            <div class="col-md-12 dashboard-section">
+                <div class="card shadow-sm border-0 bg-dark text-white">
+                    <div class="card-body text-center py-4">
+                        <h2 class="h4 mb-4"><i class="bi bi-search"></i> Queries & Operations</h2>
+                        <div class="d-flex justify-content-center gap-3">
+                            <a href="/top_event_locations" class="btn btn-outline-light btn-lg">View Top Event Locations</a>
+                            <a href="/view_teams_for_location" class="btn btn-outline-light btn-lg">View Teams For Location</a>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+        </div>
+    </div>
+    
+    <!-- Bootstrap 5 JS Bundle -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+</body>
+</html>

@@ -1,0 +1,171 @@
+\section{Requirements Analysis}
+
+The concepts can be reorganized as follows:
+
+
+\begin{table}[H]
+\centering
+\begin{tabular}{|p{15cm}|}
+\hline
+\textbf{Central Office} \\
+\hline
+The central office does not handle physical setups \\
+\hline
+Both the central office and depots are characterized by name, address, city/province, and number of employees \\
+\hline
+Bookings, either recurring or one-time, are coordinated by the central office \\
+\hline
+\end{tabular}
+\end{table}
+
+
+\begin{table}[H]
+\centering
+\begin{tabular}{|p{15cm}|}
+\hline
+\textbf{Depot} \\
+\hline
+Several operational depots located across the world \\
+\hline
+Each depot covers a specific region \\
+\hline
+Both the central office and depots are characterized by name, address, city/province, and number of employees \\
+\hline
+Depots have one or more setup teams, each with a maximum number of members \\
+\hline
+\end{tabular}
+\end{table}
+
+
+\begin{table}[H]
+\centering
+\begin{tabular}{|p{15cm}|}
+\hline
+\textbf{Region} \\
+\hline
+A specific region covered by each depot \\
+\hline
+Each region consists of one or more municipalities \\
+\hline
+\end{tabular}
+\end{table}
+
+
+\begin{table}[H]
+\centering
+\begin{tabular}{|p{15cm}|}
+\hline
+\textbf{Booking} \\
+\hline
+Bookings can be either recurring or one-time \\
+\hline
+Bookings are coordinated by the central office \\
+\hline
+Bookings can be placed by customers via phone, postal mail, email, or through the website \\
+\hline
+The company handles seasonal contracts and special promotional rentals \\
+\hline
+Bookings are delivered and installed at customer event locations \\
+\hline
+Each booking is characterized by type, date, duration, cost, the team that handled it, and the details of the customer who placed it \\
+\hline
+\end{tabular}
+\end{table}
+
+
+\begin{table}[H]
+\centering
+\begin{tabular}{|p{15cm}|}
+\hline
+\textbf{Customer} \\
+\hline
+Customers are classified as individuals or companies \\
+\hline
+Customers are identified by an alphanumeric code and their personal details \\
+\hline
+Customers can place bookings via phone, postal mail, email, or through the website \\
+\hline
+Each customer can have one or more event locations \\
+\hline
+\end{tabular}
+\end{table}
+
+
+\begin{table}[H]
+\centering
+\begin{tabular}{|p{15cm}|}
+\hline
+\textbf{Event Location} \\
+\hline
+Bookings are delivered and installed at customer event locations \\
+\hline
+Event locations are characterized by address, house number, postal code, city, and province \\
+\hline
+Each address is identified by a unique code within the customer's profile \\
+\hline
+Each event location has a setup time estimate and equipment capacity \\
+\hline
+\end{tabular}
+\end{table}
+
+
+\begin{table}[H]
+\centering
+\begin{tabular}{|p{15cm}|}
+\hline
+\textbf{Setup Team} \\
+\hline
+Depots have one or more setup teams \\
+\hline
+Each team has a maximum number of members \\
+\hline
+Each team is characterized by an identification code and a name \\
+\hline
+Each team is tracked by the number of installations made \\
+\hline
+Team members have personal data stored \\
+\hline
+\end{tabular}
+\end{table}
+
+
+\begin{table}[H]
+\centering
+\begin{tabular}{|p{15cm}|}
+\hline
+\textbf{Equipment} \\
+\hline
+Audiovisual equipment is managed for the rental and installation for events \\
+\hline
+Each event location has equipment capacity \\
+\hline
+\end{tabular}
+\end{table}
+
+\subsection{Glossary of Terms}
+
+\begin{table}[H]
+\centering
+\begin{tabular}{|p{2.2cm}|p{4cm}|p{3.5cm}|p{3.5cm}|}
+\hline
+\textbf{Concept} & \textbf{Description} & \textbf{Connections} & \textbf{Synonyms} \\
+\hline
+Central Office & The main coordination center that does not handle physical setups but coordinates all bookings & Depot, Booking & - \\
+\hline
+Depot & Operational centers located across the world, characterized by name, address, city/province, and number of employees & Region, Setup Team & Operational Depot \\
+\hline
+Region & Geographic areas covered by depots, consisting of one or more municipalities & Depot, Municipality & - \\
+\hline
+Booking & Service requests that can be recurring or one-time, placed via various channels and characterized by type, date, duration, cost, team, and customer details & Customer, Event Location, Setup Team & - \\
+\hline
+Customer & Individuals or companies identified by alphanumeric code and personal details who place bookings and have event locations & Booking, Event Location & - \\
+\hline
+Event Location & Specific places characterized by address, house number, postal code, city, and province where bookings are delivered and installed & Customer, Booking & - \\
+\hline
+Setup Team & Groups of installation personnel working at depots, identified by code and name, tracked by number of installations and member personal data & Depot, Members & Setup Team, Installation Team, Team \\
+\hline
+Installations & Audiovisual devices managed for rental and installation at events & Booking & Audiovisual Equipment, Equipment \\
+\hline
+\end{tabular}
+\end{table}
+

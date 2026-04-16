@@ -1,0 +1,1003 @@
+\section{Physical Design in Oracle}
+
+\subsection{Creation of types}
+
+The database schema relies heavily on object types to encapsulate entities and their attributes, supporting inheritance and nested collections.
+
+\subsubsection{Customer Domain}
+The customer entities are modeled using inheritance, where \texttt{Individual\_t} and \texttt{Company\_t} inherit from the base \texttt{Customer\_t} type. \texttt{ContactInfo\_t} and \texttt{Anagraphic\_t} keep contact and personal details structured.
+
+\begin{minted}{sql}
+CREATE OR REPLACE TYPE ContactInfo_t AS OBJECT (
+    email VARCHAR2(100), 
+    phone VARCHAR2(20)
+);
+
+CREATE OR REPLACE TYPE Anagraphic_t AS OBJECT (
+    name VARCHAR2(100), 
+    surname VARCHAR2(100), 
+    date_of_birth DATE, 
+    gender VARCHAR2(10)
+);
+
+CREATE OR REPLACE TYPE Customer_t AS OBJECT (
+    code VARCHAR2(20),
+    contact_info ContactInfo_t
+) NOT INSTANTIABLE NOT FINAL;
+
+CREATE OR REPLACE TYPE Individual_t UNDER Customer_t (
+    anagraphic Anagraphic_t
+);
+
+CREATE OR REPLACE TYPE Company_t UNDER Customer_t (
+    name VARCHAR2(100),
+    vat_number VARCHAR2(50)
+);
+\end{minted}
+
+\subsubsection{Geography and Infrastructure}
+Geographical properties and infrastructures such as Central Offices and Depots are modeled. Nested tables are used for municipalities covered by a depot since they represent a one-to-many relationship stricly coupled to the depot entity.
+
+\begin{minted}{sql}
+CREATE OR REPLACE TYPE Location_t AS OBJECT (
+    region VARCHAR2(100),
+    province VARCHAR2(100), 
+    city VARCHAR2(100), 
+    address VARCHAR2(200)
+);
+
+CREATE OR REPLACE TYPE CentralOffice_t AS OBJECT (
+    name VARCHAR2(100), 
+    n_employees NUMBER, 
+    location Location_t
+);
+
+CREATE OR REPLACE TYPE Municipality_t AS OBJECT (
+    name VARCHAR2(100)
+);
+
+CREATE OR REPLACE TYPE MunicipalityTable AS TABLE OF Municipality_t;
+
+CREATE OR REPLACE TYPE Depot_t AS OBJECT (
+    name VARCHAR2(100), 
+    n_employees NUMBER, 
+    location Location_t,
+    municipalities MunicipalityTable,
+    central_office REF CentralOffice_t
+);
+\end{minted}
+
+\subsubsection{Personnel and Teams}
+Staff members are grouped in arrays bounded by a maximum capacity, belonging to a particular team. Since by specifications a team can have at most 10 members, a varray of 10 members is used to model the members collection.
+
+\begin{minted}{sql}
+CREATE OR REPLACE TYPE Member_t AS OBJECT (
+    anagraphic Anagraphic_t,
+    contact_info ContactInfo_t
+);
+
+CREATE OR REPLACE TYPE MembersVarray AS VARRAY(10) OF Member_t;
+
+CREATE OR REPLACE TYPE Team_t AS OBJECT (
+    id NUMBER,
+    name VARCHAR2(100), 
+    n_installations_made NUMBER,
+    depot REF Depot_t,
+    members MembersVarray
+);
+\end{minted}
+
+\subsubsection{Services and Installations}
+Promotions inherit from standard installations, extending them with discount information and a deadline.
+
+\begin{minted}{sql}
+CREATE OR REPLACE TYPE Installation_t AS OBJECT (
+    name VARCHAR2(100), 
+    description VARCHAR2(200), 
+    cost NUMBER
+) NOT FINAL;
+
+CREATE OR REPLACE TYPE Promo_t UNDER Installation_t (
+    code VARCHAR2(50), 
+    discont NUMBER, 
+    deadline DATE
+);
+\end{minted}
+
+\subsubsection{Bookings and Event Locations}
+Event locations keep capacity and setup estimates, while bookings references participating installations, teams, and locations. Inheritance allows distinguishing recurrent bookings from one-time bookings by adding interval and repetition count attributes to the \texttt{RecurrentBooking\_t} subtype. Seasonal contracts/bookings can be modeled as recurrent bookings with a specific interval and number of repetitions, allowing for flexible scheduling while maintaining the core booking structure.
+
+\begin{minted}{sql}
+CREATE OR REPLACE TYPE EventLocation_t AS OBJECT (
+    code NUMBER,
+    location Location_t, 
+    postal_code VARCHAR2(20), 
+    house_number VARCHAR2(20),
+    setup_time_estimate NUMBER, 
+    eq_capacity NUMBER, 
+    customer REF Customer_t
+);
+
+CREATE OR REPLACE TYPE Booking_t AS OBJECT (
+    code NUMBER,
+    booking_date DATE, 
+    duration NUMBER, 
+    team REF Team_t, 
+    installation REF Installation_t, 
+    event_location REF EventLocation_t
+) NOT FINAL;
+
+CREATE OR REPLACE TYPE RecurrentBooking_t UNDER Booking_t (
+    interval NUMBER, 
+    n_times NUMBER
+) NOT FINAL;
+\end{minted}
+
+\subsection{Creation of tables}
+
+Object tables are instantiated from the defined object types. These tables contain constraints for subtype validation and data consistency.
+
+\subsubsection{Offices, Depots, and Teams}
+\texttt{CentralOffices} are connected to \texttt{Depots}, which handle nested municipal boundaries inside \texttt{MunicipalitiesNT}. Constraints check for valid \texttt{Location\_t} parameters.
+
+\begin{minted}{sql}
+CREATE TABLE CentralOffices OF CentralOffice_t(
+    name NOT NULL PRIMARY KEY,
+    CONSTRAINT chk_vld_location_data_on_central_offices CHECK (
+        location.province IS NOT NULL AND
+        location.city IS NOT NULL AND
+        location.address IS NOT NULL
+    )
+);
+
+CREATE TABLE Depots OF Depot_t (
+    central_office NOT NULL REFERENCES CentralOffices ON DELETE CASCADE,
+    name NOT NULL PRIMARY KEY,
+    CONSTRAINT chk_vld_location_data_on_depots CHECK (
+        location.province IS NOT NULL AND
+        location.city IS NOT NULL AND
+        location.address IS NOT NULL
+    )
+) NESTED TABLE municipalities STORE AS MunicipalitiesNT;
+
+CREATE TABLE Teams OF Team_t (
+    id DEFAULT seq_teams.NEXTVAL NOT NULL PRIMARY KEY,
+    depot NOT NULL REFERENCES Depots ON DELETE CASCADE,
+    name NOT NULL
+);
+\end{minted}
+
+\subsubsection{Customers}
+The \texttt{Customers} table includes heavy type discrimination logic to assert subtype attribute fulfillment (\texttt{Individual\_t} versus \texttt{Company\_t}) since constraints for inheritant attributes must be placed at the table level.
+
+\begin{minted}{sql}
+CREATE TABLE Customers OF Customer_t (
+    code NOT NULL PRIMARY KEY,
+    CONSTRAINT chk_contact_info CHECK (
+        contact_info.email IS NOT NULL OR contact_info.phone IS NOT NULL
+    ),
+    CONSTRAINT chk_individual_not_null CHECK (
+        TREAT(SYS_NC_ROWINFO$ AS Individual_t) IS NULL OR (
+            TREAT(SYS_NC_ROWINFO$ AS Individual_t).anagraphic.name IS NOT NULL AND
+            TREAT(SYS_NC_ROWINFO$ AS Individual_t).anagraphic.surname IS NOT NULL AND
+            TREAT(SYS_NC_ROWINFO$ AS Individual_t).anagraphic.date_of_birth IS NOT NULL AND
+            TREAT(SYS_NC_ROWINFO$ AS Individual_t).anagraphic.gender IS NOT NULL
+        )
+    ),
+    CONSTRAINT chk_company_not_null CHECK (
+        TREAT(SYS_NC_ROWINFO$ AS Company_t) IS NULL OR (
+            TREAT(SYS_NC_ROWINFO$ AS Company_t).name IS NOT NULL AND
+            TREAT(SYS_NC_ROWINFO$ AS Company_t).vat_number IS NOT NULL
+        )
+    )
+);
+\end{minted}
+
+\subsubsection{Installations, Event Locations, and Bookings}
+Type casting constraints also guard constraints over \texttt{Promo\_t} and \texttt{RecurrentBooking\_t}.
+
+\begin{minted}{sql}
+CREATE TABLE Installations OF Installation_t(
+    name NOT NULL PRIMARY KEY,
+    description NOT NULL,
+    cost NOT NULL CHECK (cost >= 0),
+    CONSTRAINT chk_promo_attributes CHECK (
+        TREAT(SYS_NC_ROWINFO$ AS Promo_t) IS NULL OR (
+            TREAT(SYS_NC_ROWINFO$ AS Promo_t).code IS NOT NULL AND
+            TREAT(SYS_NC_ROWINFO$ AS Promo_t).discont IS NOT NULL AND
+            TREAT(SYS_NC_ROWINFO$ AS Promo_t).deadline IS NOT NULL AND
+            TREAT(SYS_NC_ROWINFO$ AS Promo_t).discont >= 0 AND
+            TREAT(SYS_NC_ROWINFO$ AS Promo_t).discont <= 100
+        )
+    )
+);
+
+CREATE TABLE EventLocations OF EventLocation_t (
+    code DEFAULT seq_event_locations.NEXTVAL NOT NULL PRIMARY KEY,
+    customer NOT NULL REFERENCES Customers ON DELETE CASCADE,
+    postal_code NOT NULL,
+    house_number NOT NULL,
+    eq_capacity NOT NULL CHECK (eq_capacity >= 0),
+    CONSTRAINT chk_vld_location_data_on_event_locations CHECK (
+        location.province IS NOT NULL AND
+        location.city IS NOT NULL AND
+        location.address IS NOT NULL
+    )
+);
+
+CREATE TABLE Bookings OF Booking_t (
+    code DEFAULT seq_bookings.NEXTVAL NOT NULL PRIMARY KEY,
+    team NOT NULL REFERENCES Teams ON DELETE CASCADE,
+    installation NOT NULL REFERENCES Installations ON DELETE CASCADE, 
+    event_location NOT NULL REFERENCES EventLocations ON DELETE CASCADE,
+    booking_date NOT NULL,
+    duration NOT NULL CHECK (duration > 0),
+    CONSTRAINT chk_recurrent_booking_attributes CHECK (
+        TREAT(SYS_NC_ROWINFO$ AS RecurrentBooking_t) IS NULL OR (
+            TREAT(SYS_NC_ROWINFO$ AS RecurrentBooking_t).interval IS NOT NULL AND
+            TREAT(SYS_NC_ROWINFO$ AS RecurrentBooking_t).interval > 0 AND
+            TREAT(SYS_NC_ROWINFO$ AS RecurrentBooking_t).n_times IS NOT NULL AND
+            TREAT(SYS_NC_ROWINFO$ AS RecurrentBooking_t).n_times > 0
+        )
+    )
+);
+\end{minted}
+
+\subsection{Creation of triggers}
+
+Triggers automate business logic that spans multiple entities, enforcing complex application constraints implicitly.
+
+\subsubsection{Promo Validation}
+A trigger on \texttt{Bookings} verifies that a tied \texttt{Promo\_t} deadline has not been breached by reading it from the referenced \texttt{Installations} record.
+
+\begin{minted}{sql}
+CREATE OR REPLACE TRIGGER trg_validate_promo_deadline
+BEFORE INSERT OR UPDATE ON Bookings
+FOR EACH ROW
+DECLARE
+    promo_deadline DATE;
+BEGIN
+    IF :NEW.installation IS NOT NULL THEN
+        SELECT TREAT(VALUE(i) AS Promo_t).deadline INTO promo_deadline
+        FROM Installations i
+        WHERE REF(i) = :NEW.installation AND VALUE(i) IS OF (Promo_t);
+        
+        IF promo_deadline IS NOT NULL AND TRUNC(SYSDATE) > promo_deadline THEN
+            RAISE_APPLICATION_ERROR(-20001, 'This promo has expired and cannot be used.');
+        END IF;
+    END IF;
+EXCEPTION
+    WHEN NO_DATA_FOUND THEN NULL; 
+END;
+\end{minted}
+
+\subsubsection{Team Installations Counter}
+Updates the \texttt{n\_installations\_made} in a \texttt{Teams} record automatically upon bookings lifecycle.
+
+\begin{minted}{sql}
+CREATE OR REPLACE TRIGGER trg_n_installations
+AFTER INSERT OR DELETE OR UPDATE ON Bookings
+FOR EACH ROW
+BEGIN
+    IF INSERTING THEN
+        UPDATE Teams t SET t.n_installations_made = NVL(t.n_installations_made, 0) + 1 
+        WHERE REF(t) = :NEW.team;
+    ELSIF DELETING THEN
+        UPDATE Teams t SET t.n_installations_made = GREATEST(NVL(t.n_installations_made, 0) - 1, 0) 
+        WHERE REF(t) = :OLD.team;
+    ELSIF UPDATING THEN
+        IF :OLD.team != :NEW.team THEN
+            UPDATE Teams t SET t.n_installations_made = GREATEST(NVL(t.n_installations_made, 0) - 1, 0) 
+            WHERE REF(t) = :OLD.team;
+            UPDATE Teams t SET t.n_installations_made = NVL(t.n_installations_made, 0) + 1 
+            WHERE REF(t) = :NEW.team;
+        END IF;
+    END IF;
+END;
+\end{minted}
+
+\subsubsection{Setup Time Estimates}
+Maintains an aggregated setup time in \texttt{EventLocations} utilizing booking durations, with support for duration and location changes during updates.
+
+\begin{minted}{sql}
+CREATE OR REPLACE TRIGGER trg_setup_time
+AFTER INSERT OR DELETE OR UPDATE ON Bookings
+FOR EACH ROW
+BEGIN
+    IF INSERTING THEN
+        UPDATE EventLocations e 
+        SET e.setup_time_estimate = NVL(e.setup_time_estimate, 0) + NVL(:NEW.duration, 0)
+        WHERE REF(e) = :NEW.event_location;
+    ELSIF DELETING THEN
+        UPDATE EventLocations e 
+        SET e.setup_time_estimate = GREATEST(NVL(e.setup_time_estimate, 0) - NVL(:OLD.duration, 0), 0)
+        WHERE REF(e) = :OLD.event_location;
+    ELSIF UPDATING THEN
+        IF :OLD.event_location = :NEW.event_location THEN
+            UPDATE EventLocations e 
+            SET e.setup_time_estimate = GREATEST(NVL(e.setup_time_estimate, 0) - NVL(:OLD.duration, 0) + NVL(:NEW.duration, 0), 0)
+            WHERE REF(e) = :NEW.event_location;
+        ELSE
+            UPDATE EventLocations e 
+            SET e.setup_time_estimate = GREATEST(NVL(e.setup_time_estimate, 0) - NVL(:OLD.duration, 0), 0)
+            WHERE REF(e) = :OLD.event_location;
+            UPDATE EventLocations e 
+            SET e.setup_time_estimate = NVL(e.setup_time_estimate, 0) + NVL(:NEW.duration, 0)
+            WHERE REF(e) = :NEW.event_location;
+        END IF;
+    END IF;
+END;
+/
+\end{minted}
+
+\subsubsection{Employee Headcount Hierarchy Sync}
+Complex chained event propagation updates employee counts recursively upwards to Depots and Central Offices whenever Teams shift or alter their configuration natively based on the size of the members varray.
+
+\begin{minted}{sql}
+CREATE OR REPLACE TRIGGER trg_n_employees
+AFTER INSERT OR DELETE OR UPDATE ON Teams
+FOR EACH ROW
+DECLARE
+    v_diff NUMBER := 0;
+    v_co_ref REF CentralOffice_t;
+BEGIN
+    IF INSERTING THEN
+        v_diff := NVL(:NEW.members.COUNT, 0);
+        IF v_diff != 0 AND :NEW.depot IS NOT NULL THEN
+            UPDATE Depots d SET d.n_employees = NVL(d.n_employees, 0) + v_diff WHERE REF(d) = :NEW.depot RETURNING d.central_office INTO v_co_ref;
+            IF v_co_ref IS NOT NULL THEN
+                UPDATE CentralOffices c SET c.n_employees = NVL(c.n_employees, 0) + v_diff WHERE REF(c) = v_co_ref;
+            END IF;
+        END IF;
+    ELSIF DELETING THEN
+        v_diff := NVL(:OLD.members.COUNT, 0);
+        IF v_diff != 0 AND :OLD.depot IS NOT NULL THEN
+            UPDATE Depots d SET d.n_employees = GREATEST(NVL(d.n_employees, 0) - v_diff, 0) WHERE REF(d) = :OLD.depot RETURNING d.central_office INTO v_co_ref;
+            IF v_co_ref IS NOT NULL THEN
+                UPDATE CentralOffices c SET c.n_employees = GREATEST(NVL(c.n_employees, 0) - v_diff, 0) WHERE REF(c) = v_co_ref;
+            END IF;
+        END IF;
+    ELSIF UPDATING THEN
+        IF :OLD.depot = :NEW.depot THEN
+            v_diff := NVL(:NEW.members.COUNT, 0) - NVL(:OLD.members.COUNT, 0);
+            IF v_diff != 0 AND :NEW.depot IS NOT NULL THEN
+                UPDATE Depots d SET d.n_employees = GREATEST(NVL(d.n_employees, 0) + v_diff, 0) WHERE REF(d) = :NEW.depot RETURNING d.central_office INTO v_co_ref;
+                IF v_co_ref IS NOT NULL THEN
+                    UPDATE CentralOffices c SET c.n_employees = GREATEST(NVL(c.n_employees, 0) + v_diff, 0) WHERE REF(c) = v_co_ref;
+                END IF;
+            END IF;
+        ELSE
+            -- Remove from old depot
+            v_diff := NVL(:OLD.members.COUNT, 0);
+            IF v_diff != 0 AND :OLD.depot IS NOT NULL THEN
+                UPDATE Depots d SET d.n_employees = GREATEST(NVL(d.n_employees, 0) - v_diff, 0) WHERE REF(d) = :OLD.depot RETURNING d.central_office INTO v_co_ref;
+                IF v_co_ref IS NOT NULL THEN
+                    UPDATE CentralOffices c SET c.n_employees = GREATEST(NVL(c.n_employees, 0) - v_diff, 0) WHERE REF(c) = v_co_ref;
+                END IF;
+            END IF;
+            -- Add to new depot
+            v_diff := NVL(:NEW.members.COUNT, 0);
+            IF v_diff != 0 AND :NEW.depot IS NOT NULL THEN
+                UPDATE Depots d SET d.n_employees = NVL(d.n_employees, 0) + v_diff WHERE REF(d) = :NEW.depot RETURNING d.central_office INTO v_co_ref;
+                IF v_co_ref IS NOT NULL THEN
+                    UPDATE CentralOffices c SET c.n_employees = NVL(c.n_employees, 0) + v_diff WHERE REF(c) = v_co_ref;
+                END IF;
+            END IF;
+        END IF;
+    END IF;
+END;
+/
+\end{minted}
+
+\subsection{Creation of indexes}
+
+Strategic indexes are mapped over commonly searched foreign keys to assist query optimization across large data structures. 
+
+Operations 1, 2, and 3 perform simple INSERT statements with minimal index optimization potential. Operation 1 inserts into \texttt{Customers} without complex joins, requiring no strategic indexes.
+
+{\scriptsize
+\begin{verbatim}
+--------------------------------------------------------------------------------------
+| Id  | Operation                | Name      | Rows  | Bytes | Cost (%CPU)| Time     |
+--------------------------------------------------------------------------------------
+|   0 | INSERT STATEMENT         |           |     1 |   100 |     1   (0)| 00:00:01 |
+|   1 |  LOAD TABLE CONVENTIONAL | CUSTOMERS |       |       |            |          |
+--------------------------------------------------------------------------------------
+\end{verbatim}
+}
+
+Operations 2 and 3, while referencing other tables through foreign key constraints, utilize only primary key indexes for constraint validation, which are automatically maintained by the database. These operations do not benefit from additional indexes on foreign key columns since the insertion path does not involve large-scale filtering or joins.
+
+{\scriptsize
+    \begin{verbatim}
+-----------------------------------------------------------------------------------------------
+| Id  | Operation                    | Name           | Rows  | Bytes | Cost (%CPU)| Time     |
+-----------------------------------------------------------------------------------------------
+|   0 | INSERT STATEMENT             |                |     1 |   100 |     1   (0)| 00:00:01 |
+|   1 |  LOAD TABLE CONVENTIONAL     | BOOKINGS       |       |       |            |          |
+|   2 |   TABLE ACCESS BY INDEX ROWID| EVENTLOCATIONS |     1 |    35 |     1   (0)| 00:00:01 |
+|*  3 |    INDEX UNIQUE SCAN         | SYS_C0010367   |     1 |       |     1   (0)| 00:00:01 |
+|   4 |   TABLE ACCESS BY INDEX ROWID| INSTALLATIONS  |     1 |    74 |     1   (0)| 00:00:01 |
+|*  5 |    INDEX UNIQUE SCAN         | SYS_C0010358   |     1 |       |     1   (0)| 00:00:01 |
+|*  6 |   TABLE ACCESS FULL          | TEAMS          |     1 |    74 |     2   (0)| 00:00:01 |
+-----------------------------------------------------------------------------------------------
+ 
+Predicate Information (identified by operation id):
+---------------------------------------------------
+ 
+   3 - access("CODE"=1)
+   5 - access("NAME"='Installation 1')
+   6 - filter("NAME"='Team 1')
+
+\end{verbatim}
+}
+{\scriptsize
+\begin{verbatim}
+-----------------------------------------------------------------------------------------------
+| Id  | Operation                    | Name           | Rows  | Bytes | Cost (%CPU)| Time     |
+-----------------------------------------------------------------------------------------------
+|   0 | INSERT STATEMENT             |                |     1 |   100 |     1   (0)| 00:00:01 |
+|   1 |  LOAD TABLE CONVENTIONAL     | EVENTLOCATIONS |       |       |            |          |
+|   2 |   TABLE ACCESS BY INDEX ROWID| CUSTOMERS      |     1 |    34 |     1   (0)| 00:00:01 |
+|*  3 |    INDEX UNIQUE SCAN         | SYS_C0010351   |     1 |       |     1   (0)| 00:00:01 |
+-----------------------------------------------------------------------------------------------
+
+Predicate Information (identified by operation id):
+---------------------------------------------------
+ 
+   3 - access("CODE"='IND1')
+\end{verbatim}
+}
+
+Operation 4 demonstrates a scenario where index effectiveness depends on data volume. An index on \texttt{Bookings} mapped over the \texttt{event\_location} foreign key reference attribute accelerates performance for retrieving location dependencies especially for the operation \ref{op4} as also its explained plan shows, where the index is used to quickly filter relevant bookings for the specified event location, reducing the search space for the join with event locations and with teams.
+
+\begin{minted}{sql}
+CREATE INDEX idx_bookings_event_loc ON Bookings (event_location);
+\end{minted}
+
+{\scriptsize
+\begin{verbatim}
+-----------------------------------------------------------------------------------------------------------------
+| Id  | Operation                              | Name                   | Rows  | Bytes | Cost (%CPU)| Time     |
+-----------------------------------------------------------------------------------------------------------------
+|   0 | SELECT STATEMENT                       |                        |     5 |  9700 |     5  (20)| 00:00:01 |
+|   1 |  HASH UNIQUE                           |                        |     5 |  9700 |     5  (20)| 00:00:01 |
+|*  2 |   HASH JOIN OUTER                      |                        |     5 |  9700 |     4   (0)| 00:00:01 |
+|   3 |    NESTED LOOPS                        |                        |     5 |   275 |     1   (0)| 00:00:01 |
+|   4 |     TABLE ACCESS BY INDEX ROWID        | EVENTLOCATIONS         |     1 |    35 |     1   (0)| 00:00:01 |
+|*  5 |      INDEX UNIQUE SCAN                 | SYS_C0010367           |     1 |       |     1   (0)| 00:00:01 |
+|   6 |     TABLE ACCESS BY INDEX ROWID BATCHED| BOOKINGS               |     5 |   100 |     0   (0)| 00:00:01 |
+|*  7 |      INDEX RANGE SCAN                  | IDX_BOOKINGS_EVENT_LOC |     5 |       |     0   (0)| 00:00:01 |
+|   8 |    TABLE ACCESS FULL                   | TEAMS                  |   100 |   184K|     3   (0)| 00:00:01 |
+-----------------------------------------------------------------------------------------------------------------
+ 
+Predicate Information (identified by operation id):
+---------------------------------------------------
+ 
+   2 - access("P000004$"."SYS_NC_OID$"(+)="B"."SYS_NC00012$")
+   5 - access("CODE"=1)
+   7 - access("B"."SYS_NC00014$"="E"."SYS_NC_OID$")
+ 
+Note
+-----
+   - dynamic statistics used: dynamic sampling (level=2)
+\end{verbatim}
+}
+
+Although the composite index \texttt{idx\_bookings\_event\_loc} on the \texttt{event\_location} foreign key reference is available to optimize the query, the estimated result set of only 5 rows suggests that a full table scan of \texttt{Bookings} may be equally or more efficient than index traversal and callback operations. Oracle's cost-based optimizer may therefore elect to use a table scan over the index, particularly when the indexed column selectivity is low relative to the table size, illustrating that index creation does not guarantee index usage.
+
+{\scriptsize
+\begin{verbatim}
+---------------------------------------------------------------------------------------
+| Id  | Operation            | Name           | Rows  | Bytes | Cost (%CPU)| Time     |
+---------------------------------------------------------------------------------------
+|   0 | SELECT STATEMENT     |                |  5161 |  1789K|    28   (8)| 00:00:01 |
+|   1 |  SORT ORDER BY       |                |  5161 |  1789K|    28   (8)| 00:00:01 |
+|   2 |   SORT GROUP BY      |                |  5161 |  1789K|    28   (8)| 00:00:01 |
+|*  3 |    HASH JOIN OUTER   |                |  5161 |  1789K|    26   (0)| 00:00:01 |
+|   4 |     TABLE ACCESS FULL| BOOKINGS       |  5161 | 51610 |    19   (0)| 00:00:01 |
+|   5 |     TABLE ACCESS FULL| EVENTLOCATIONS |  1001 |   337K|     7   (0)| 00:00:01 |
+---------------------------------------------------------------------------------------
+
+Predicate Information (identified by operation id):
+---------------------------------------------------
+ 
+   3 - access("P000003$"."SYS_NC_OID$"(+)="B"."SYS_NC00014$")
+ 
+Note
+-----
+   - dynamic statistics used: dynamic sampling (level=2)
+\end{verbatim}
+}
+
+\subsection{Database Population Procedures}
+
+Population procedures provide parameterized utilities to insert data into the database in a controlled manner, supporting flexible configuration and automated testing.
+
+\subsubsection{Central Offices Population}
+Populates the \texttt{CentralOffices} table with a specified number of entries, each assigned a location.
+
+\begin{minted}{sql}
+CREATE OR REPLACE PROCEDURE populate_central_offices(n IN NUMBER) IS
+BEGIN
+    FOR i IN 1..n LOOP
+        INSERT INTO CentralOffices p (p.name, p.n_employees, p.location)
+        VALUES (
+            'Central Office ' || i,
+            0,
+            Location_t('Region' || i, 'Province' || i, 'City' || i, 'Address ' || i)
+        );
+    END LOOP;
+    COMMIT;
+END;
+/
+\end{minted}
+
+\subsubsection{Depots Population}
+Creates depot records, each randomly associated with a central office and populated with municipality references.
+
+\begin{minted}{sql}
+CREATE OR REPLACE PROCEDURE populate_depots(n IN NUMBER) IS
+    TYPE ref_co_list IS TABLE OF REF CentralOffice_t INDEX BY PLS_INTEGER;
+    v_co_refs ref_co_list;
+    v_co_count NUMBER;
+    v_co_ref REF CentralOffice_t;
+    v_num_municipalities NUMBER;
+    v_municipalities MunicipalityTable;
+BEGIN
+    SELECT REF(c) BULK COLLECT INTO v_co_refs FROM CentralOffices c;
+    v_co_count := v_co_refs.COUNT;
+
+    FOR i IN 1..n LOOP
+        v_co_ref := v_co_refs(TRUNC(DBMS_RANDOM.VALUE(1, v_co_count + 1)));
+        v_num_municipalities := TRUNC(DBMS_RANDOM.VALUE(1, 6));
+        v_municipalities := MunicipalityTable();
+        FOR j IN 1..v_num_municipalities LOOP
+            v_municipalities.EXTEND;
+            v_municipalities(j) := Municipality_t('Municipality ' || i || '_' || j);
+        END LOOP;
+
+        INSERT INTO Depots (name, n_employees, location, municipalities, central_office)
+        VALUES (
+            'Depot ' || i,
+            0,
+            Location_t('Region' || (i+100), 'Province' || (i+100), 'City' || (i+100), 'Address ' || (i+100)),
+            v_municipalities,
+            v_co_ref
+        );
+    END LOOP;
+    COMMIT;
+END;
+/
+\end{minted}
+
+\subsubsection{Teams Population}
+Initializes team records with randomly assigned depots and team members with generated contact information.
+
+\begin{minted}{sql}
+CREATE OR REPLACE PROCEDURE populate_teams(n IN NUMBER) IS
+    TYPE ref_depot_list IS TABLE OF REF Depot_t INDEX BY PLS_INTEGER;
+    v_depot_refs ref_depot_list;
+    v_depot_count NUMBER;
+    v_depot_ref REF Depot_t;
+    v_num_members NUMBER;
+    v_members MembersVarray;
+    v_gender VARCHAR2(10);
+BEGIN
+    SELECT REF(d) BULK COLLECT INTO v_depot_refs FROM Depots d;
+    v_depot_count := v_depot_refs.COUNT;
+
+    FOR i IN 1..n LOOP
+        v_depot_ref := v_depot_refs(TRUNC(DBMS_RANDOM.VALUE(1, v_depot_count + 1)));
+        v_num_members := TRUNC(DBMS_RANDOM.VALUE(1, 6));
+        v_members := MembersVarray();
+        FOR j IN 1..v_num_members LOOP
+            v_members.EXTEND;
+            IF MOD(j, 3) = 0 THEN
+                v_gender := 'male';
+            ELSIF MOD(j, 3) = 1 THEN
+                v_gender := 'female';
+            ELSE
+                v_gender := 'other';
+            END IF;
+
+            v_members(j) := Member_t(
+                Anagraphic_t(
+                    'MName' || i || '_' || j, 
+                    'MSurname' || i || '_' || j, 
+                    TO_DATE('1985-01-01', 'YYYY-MM-DD') + MOD(i * j * 100, 10000), 
+                    v_gender
+                ),
+                ContactInfo_t(
+                    'member' || i || '_' || j || '@team.com', 
+                    '+39' || TO_CHAR(DBMS_RANDOM.value(3000000000, 3999999999), 'FM0000000000')
+                )
+            );
+        END LOOP;
+
+        INSERT INTO Teams (id, name, n_installations_made, depot, members)
+        VALUES (
+            seq_teams.NEXTVAL,
+            'Team ' || i,
+            0,
+            v_depot_ref,
+            v_members
+        );
+    END LOOP;
+    COMMIT;
+END;
+/
+\end{minted}
+
+\subsubsection{Installations Population}
+Populates standard installations and promotional installations with randomly generated costs and descriptions.
+
+\begin{minted}{sql}
+CREATE OR REPLACE PROCEDURE populate_installations(n IN NUMBER, is_promo IN NUMBER) IS
+BEGIN
+    FOR i IN 1..n LOOP
+        IF is_promo = 0 THEN
+            INSERT INTO Installations VALUES (
+                Installation_t(
+                    'Installation ' || i,
+                    'Description for installation ' || i,
+                    MOD(i * 15, 1000) + 50
+                )
+            );
+        ELSE
+            INSERT INTO Installations VALUES (
+                Promo_t(
+                    'Promo ' || i,
+                    'Description for promo ' || i,
+                    MOD(i * 10, 500) + 20,
+                    'CODE' || i || '_' || DBMS_RANDOM.STRING('U', 4),
+                    MOD(i * 5, 50) + 5,
+                    SYSDATE + MOD(i, 365)
+                )
+            );
+        END IF;
+    END LOOP;
+    COMMIT;
+END;
+/
+\end{minted}
+
+\subsubsection{Customers Population}
+Populates both individual and company customer records with randomly generated contact details and profile attributes.
+
+\begin{minted}{sql}
+CREATE OR REPLACE PROCEDURE populate_customers(n IN NUMBER, is_company IN NUMBER) IS
+    v_gender VARCHAR2(10);
+BEGIN
+    FOR i IN 1..n LOOP
+        IF is_company = 0 THEN
+            IF MOD(i, 2) = 0 THEN
+                v_gender := 'male';
+            ELSE
+                v_gender := 'female';
+            END IF;
+            INSERT INTO Customers VALUES (
+                Individual_t(
+                    'IND' || i,
+                    ContactInfo_t('individual' || i || '@example.com', 
+                                   '+39' || TO_CHAR(DBMS_RANDOM.value(3000000000, 3999999999), 'FM0000000000')),
+                    Anagraphic_t('IName' || i, 'ISurname' || i, 
+                                 TO_DATE('1970-01-01', 'YYYY-MM-DD') + MOD(i * 133, 15000), v_gender)
+                )
+            );
+        ELSE
+            INSERT INTO Customers VALUES (
+                Company_t(
+                    'COMP' || i,
+                    ContactInfo_t('contact@company' || i || '.com', 
+                                   '+39' || TO_CHAR(DBMS_RANDOM.value(3000000000, 3999999999), 'FM0000000000')),
+                    'Company Name ' || i,
+                    'IT' || TO_CHAR(DBMS_RANDOM.value(10000000000, 99999999999), 'FM00000000000')
+                )
+            );
+        END IF;
+    END LOOP;
+    COMMIT;
+END;
+/
+\end{minted}
+
+\subsubsection{Event Locations Population}
+Creates event location records, each randomly associated with a customer and populated with facility details.
+
+\begin{minted}{sql}
+CREATE OR REPLACE PROCEDURE populate_event_locations(n IN NUMBER) IS
+    TYPE ref_cust_list IS TABLE OF REF Customer_t INDEX BY PLS_INTEGER;
+    v_cust_refs ref_cust_list;
+    v_cust_count NUMBER;
+    v_cust_ref REF Customer_t;
+BEGIN
+    SELECT REF(c) BULK COLLECT INTO v_cust_refs FROM Customers c;
+    v_cust_count := v_cust_refs.COUNT;
+
+    FOR i IN 1..n LOOP
+        v_cust_ref := v_cust_refs(TRUNC(DBMS_RANDOM.VALUE(1, v_cust_count + 1)));
+
+        INSERT INTO EventLocations (location, postal_code, house_number, setup_time_estimate, eq_capacity, customer)
+        VALUES (
+            Location_t('Region' || (i+200), 'Province' || (i+200), 'City' || (i+200), 'Address ' || (i+200)),
+            TO_CHAR(MOD(i * 1234, 99999), 'FM00000'),
+            TO_CHAR(MOD(i, 200) + 1),
+            0,
+            MOD(i, 1000) + 50,
+            v_cust_ref
+        );
+    END LOOP;
+    COMMIT;
+END;
+/
+\end{minted}
+
+\subsubsection{Bookings Population}
+Populates both one-time and recurrent bookings by randomly associating teams, installations, and event locations.
+
+\begin{minted}{sql}
+CREATE OR REPLACE PROCEDURE populate_bookings(n IN NUMBER, is_recurrent IN NUMBER) IS
+    TYPE ref_team_list IS TABLE OF REF Team_t INDEX BY PLS_INTEGER;
+    TYPE ref_inst_list IS TABLE OF REF Installation_t INDEX BY PLS_INTEGER;
+    TYPE ref_eloc_list IS TABLE OF REF EventLocation_t INDEX BY PLS_INTEGER;
+    v_team_refs ref_team_list;
+    v_inst_refs ref_inst_list;
+    v_eloc_refs ref_eloc_list;
+    v_team_count NUMBER;
+    v_inst_count NUMBER;
+    v_eloc_count NUMBER;
+    v_team_ref REF Team_t;
+    v_inst_ref REF Installation_t;
+    v_eloc_ref REF EventLocation_t;
+    v_code NUMBER;
+BEGIN
+    SELECT REF(t) BULK COLLECT INTO v_team_refs FROM Teams t;
+    v_team_count := v_team_refs.COUNT;
+    SELECT REF(i) BULK COLLECT INTO v_inst_refs FROM Installations i;
+    v_inst_count := v_inst_refs.COUNT;
+    SELECT REF(e) BULK COLLECT INTO v_eloc_refs FROM EventLocations e;
+    v_eloc_count := v_eloc_refs.COUNT;
+
+    FOR i IN 1..n LOOP
+        v_team_ref := v_team_refs(TRUNC(DBMS_RANDOM.VALUE(1, v_team_count + 1)));
+        v_inst_ref := v_inst_refs(TRUNC(DBMS_RANDOM.VALUE(1, v_inst_count + 1)));
+        v_eloc_ref := v_eloc_refs(TRUNC(DBMS_RANDOM.VALUE(1, v_eloc_count + 1)));
+
+        v_code := seq_bookings.NEXTVAL;
+        IF is_recurrent = 0 THEN
+            INSERT INTO Bookings VALUES (
+                Booking_t(
+                    v_code,
+                    SYSDATE + MOD(i, 30),
+                    MOD(i, 8) + 1,
+                    v_team_ref,
+                    v_inst_ref,
+                    v_eloc_ref
+                )
+            );
+        ELSE
+            INSERT INTO Bookings VALUES (
+                RecurrentBooking_t(
+                    v_code,
+                    SYSDATE + MOD(i, 30),
+                    MOD(i, 4) + 1,
+                    v_team_ref,
+                    v_inst_ref,
+                    v_eloc_ref,
+                    MOD(i, 30) + 7,
+                    MOD(i, 12) + 2
+                )
+            );
+        END IF;
+    END LOOP;
+    COMMIT;
+END;
+/
+\end{minted}
+
+\subsection{Operational Procedures And Functions}
+
+Operational procedures provide runtime interfaces for managing customers, bookings, and event locations at the application level, offering both data modification and query capabilities.
+
+\subsubsection{Customer Management}
+Dedicated procedures for adding new individual and company customers with standardized validation.
+
+\begin{minted}{sql}
+CREATE OR REPLACE PROCEDURE add_new_individual_customer (
+    p_code          IN VARCHAR2,
+    p_email         IN VARCHAR2,
+    p_phone         IN VARCHAR2,
+    p_name          IN VARCHAR2,
+    p_surname       IN VARCHAR2,
+    p_date_of_birth IN DATE,
+    p_gender        IN VARCHAR2
+) IS
+BEGIN
+    INSERT INTO Customers VALUES (
+        Individual_t(
+            p_code, 
+            ContactInfo_t(p_email, p_phone), 
+            Anagraphic_t(p_name, p_surname, p_date_of_birth, p_gender)
+        )
+    );
+    COMMIT;
+EXCEPTION
+    WHEN OTHERS THEN
+        ROLLBACK;
+        RAISE_APPLICATION_ERROR(-20001, 'Error adding individual customer: ' || SQLERRM);
+END add_new_individual_customer;
+/
+
+CREATE OR REPLACE PROCEDURE add_new_company_customer (
+    p_code          IN VARCHAR2,
+    p_email         IN VARCHAR2,
+    p_phone         IN VARCHAR2,
+    p_company_name  IN VARCHAR2,
+    p_vat_number    IN VARCHAR2
+) IS
+BEGIN
+    INSERT INTO Customers VALUES (
+        Company_t(
+            p_code, 
+            ContactInfo_t(p_email, p_phone), 
+            p_company_name, 
+            p_vat_number
+        )
+    );
+    COMMIT;
+EXCEPTION
+    WHEN OTHERS THEN
+        ROLLBACK;
+        RAISE_APPLICATION_ERROR(-20001, 'Error adding company customer: ' || SQLERRM);
+END add_new_company_customer;
+/
+\end{minted}
+
+\subsubsection{Booking Management}
+Procedures for managing both one-time and recurrent bookings, associating teams with installations and event locations.
+
+\begin{minted}{sql}
+CREATE OR REPLACE PROCEDURE add_new_one_time_booking (
+    p_booking_date        IN DATE,
+    p_duration            IN NUMBER,
+    p_team_name           IN VARCHAR2,
+    p_installation_name   IN VARCHAR2,
+    p_event_location_code IN NUMBER
+) IS
+    v_team_ref           REF Team_t;
+    v_installation_ref   REF Installation_t;
+    v_event_location_ref REF EventLocation_t;
+BEGIN
+    SELECT REF(t) INTO v_team_ref FROM Teams t WHERE name = p_team_name;
+    SELECT REF(i) INTO v_installation_ref FROM Installations i WHERE name = p_installation_name;
+    SELECT REF(e) INTO v_event_location_ref FROM EventLocations e WHERE code = p_event_location_code;
+
+    INSERT INTO Bookings VALUES (
+        Booking_t(
+            seq_bookings.NEXTVAL,
+            p_booking_date,
+            p_duration,
+            v_team_ref,
+            v_installation_ref,
+            v_event_location_ref
+        )
+    );
+    COMMIT;
+EXCEPTION
+    WHEN OTHERS THEN
+        ROLLBACK;
+        RAISE_APPLICATION_ERROR(-20001, 'Error adding one-time booking: ' || SQLERRM);
+END add_new_one_time_booking;
+/
+
+CREATE OR REPLACE PROCEDURE add_new_recurrent_booking (
+    p_booking_date        IN DATE,
+    p_duration            IN NUMBER,
+    p_team_name           IN VARCHAR2,
+    p_installation_name   IN VARCHAR2,
+    p_event_location_code IN NUMBER,
+    p_interval            IN NUMBER,
+    p_n_times             IN NUMBER
+) IS
+    v_team_ref           REF Team_t;
+    v_installation_ref   REF Installation_t;
+    v_event_location_ref REF EventLocation_t;
+BEGIN
+    SELECT REF(t) INTO v_team_ref FROM Teams t WHERE name = p_team_name;
+    SELECT REF(i) INTO v_installation_ref FROM Installations i WHERE name = p_installation_name;
+    SELECT REF(e) INTO v_event_location_ref FROM EventLocations e WHERE code = p_event_location_code;
+
+    INSERT INTO Bookings VALUES (
+        RecurrentBooking_t(
+            seq_bookings.NEXTVAL,
+            p_booking_date,
+            p_duration,
+            v_team_ref,
+            v_installation_ref,
+            v_event_location_ref,
+            p_interval,
+            p_n_times
+        )
+    );
+    COMMIT;
+EXCEPTION
+    WHEN OTHERS THEN
+        ROLLBACK;
+        RAISE_APPLICATION_ERROR(-20001, 'Error adding recurrent booking: ' || SQLERRM);
+END add_new_recurrent_booking;
+/
+\end{minted}
+
+\subsubsection{Event Location Management and Queries}
+Procedures for registering event locations and retrieving aggregated booking information.
+
+\begin{minted}{sql}
+CREATE OR REPLACE PROCEDURE add_event_location (
+    p_region               IN VARCHAR2,
+    p_province             IN VARCHAR2,
+    p_city                 IN VARCHAR2,
+    p_address              IN VARCHAR2,
+    p_postal_code          IN VARCHAR2,
+    p_house_number         IN VARCHAR2,
+    p_setup_time_estimate  IN NUMBER,
+    p_eq_capacity          IN NUMBER,
+    p_customer_code        IN VARCHAR2
+) IS
+    v_customer_ref REF Customer_t;
+BEGIN
+    SELECT REF(c) INTO v_customer_ref FROM Customers c WHERE code = p_customer_code;
+
+    INSERT INTO EventLocations (code, location, postal_code, house_number, 
+                                setup_time_estimate, eq_capacity, customer)
+    VALUES (
+        seq_event_locations.NEXTVAL,
+        Location_t(p_region, p_province, p_city, p_address), 
+        p_postal_code, p_house_number, p_setup_time_estimate, p_eq_capacity, v_customer_ref
+    );
+    COMMIT;
+EXCEPTION
+    WHEN OTHERS THEN
+        ROLLBACK;
+        RAISE_APPLICATION_ERROR(-20001, 'Error registering event location: ' || SQLERRM);
+END add_event_location;
+/
+
+CREATE OR REPLACE PROCEDURE get_teams_for_location (
+    p_event_location_code IN NUMBER,
+    p_result_cursor       OUT SYS_REFCURSOR
+) IS
+    v_event_location_ref REF EventLocation_t;
+BEGIN
+    SELECT REF(e) INTO v_event_location_ref FROM EventLocations e WHERE code = p_event_location_code;
+
+    OPEN p_result_cursor FOR
+        SELECT DISTINCT 
+            DEREF(b.team).id AS team_id,
+            DEREF(b.team).name AS team_name, 
+            DEREF(b.team).n_installations_made AS installations
+        FROM Bookings b
+        WHERE b.event_location = v_event_location_ref;
+END get_teams_for_location;
+/
+
+CREATE OR REPLACE PROCEDURE get_top_event_locations (
+    p_result_cursor OUT SYS_REFCURSOR
+) IS
+BEGIN
+    OPEN p_result_cursor FOR
+        SELECT 
+            DEREF(b.event_location).code AS loc_code,
+            DEREF(b.event_location).location.address AS loc_address,
+            DEREF(b.event_location).location.city AS loc_city,
+            COUNT(*) AS total_bookings
+        FROM Bookings b
+        GROUP BY b.event_location, 
+            DEREF(b.event_location).code,
+            DEREF(b.event_location).location.address, 
+            DEREF(b.event_location).location.city
+        ORDER BY total_bookings DESC;
+END get_top_event_locations;
+/
+\end{minted}
+
