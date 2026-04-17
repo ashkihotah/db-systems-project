@@ -209,5 +209,115 @@ def view_teams_for_location():
                 conn.close()
     return render_template('view_teams.html', teams=teams)
 
+@app.route('/add_installation', methods=['POST'])
+def add_installation():
+    name = request.form['name']
+    description = request.form['description']
+    cost = request.form['cost']
+
+    conn = get_connection()
+    if conn:
+        try:
+            with conn.cursor() as cursor:
+                cursor.callproc('add_new_installation', [name, description, cost])
+                conn.commit()
+            flash('Installation added successfully!', 'success')
+        except oracledb.Error as e:
+            flash(f'Error adding installation: {str(e)}', 'error')
+        finally:
+            conn.close()
+    return redirect(url_for('index'))
+
+@app.route('/add_promo_installation', methods=['POST'])
+def add_promo_installation():
+    name = request.form['name']
+    description = request.form['description']
+    cost = request.form['cost']
+    code = request.form['code']
+    discont = request.form['discont']
+    deadline = datetime.strptime(request.form['deadline'], '%Y-%m-%d').date()
+
+    conn = get_connection()
+    if conn:
+        try:
+            with conn.cursor() as cursor:
+                cursor.callproc('add_new_promo_installation', [name, description, cost, code, discont, deadline])
+                conn.commit()
+            flash('Promo Installation added successfully!', 'success')
+        except oracledb.Error as e:
+            flash(f'Error adding promo installation: {str(e)}', 'error')
+        finally:
+            conn.close()
+    return redirect(url_for('index'))
+
+@app.route('/add_central_office', methods=['POST'])
+def add_central_office():
+    name = request.form['name']
+    region = request.form['region']
+    province = request.form['province']
+    city = request.form['city']
+    address = request.form['address']
+
+    conn = get_connection()
+    if conn:
+        try:
+            with conn.cursor() as cursor:
+                cursor.callproc('add_new_central_office', [name, region, province, city, address])
+                conn.commit()
+            flash('Central Office added successfully!', 'success')
+        except oracledb.Error as e:
+            flash(f'Error adding central office: {str(e)}', 'error')
+        finally:
+            conn.close()
+    return redirect(url_for('index'))
+
+@app.route('/add_depot', methods=['POST'])
+def add_depot():
+    name = request.form['name']
+    region = request.form['region']
+    province = request.form['province']
+    city = request.form['city']
+    address = request.form['address']
+    central_office = request.form['central_office']
+
+    conn = get_connection()
+    if conn:
+        try:
+            with conn.cursor() as cursor:
+                cursor.execute("""
+                    BEGIN
+                        add_new_depot(:name, :region, :province, :city, :addr, :co, MunicipalityTable());
+                    END;
+                """, name=name, region=region, province=province, city=city, addr=address, co=central_office)
+                conn.commit()
+            flash('Depot added successfully!', 'success')
+        except oracledb.Error as e:
+            flash(f'Error adding depot: {str(e)}', 'error')
+        finally:
+            conn.close()
+    return redirect(url_for('index'))
+
+@app.route('/add_team', methods=['POST'])
+def add_team():
+    name = request.form['name']
+    depot = request.form['depot']
+
+    conn = get_connection()
+    if conn:
+        try:
+            with conn.cursor() as cursor:
+                cursor.execute("""
+                    BEGIN
+                        add_new_team(:name, :depot, MembersVarray());
+                    END;
+                """, name=name, depot=depot)
+                conn.commit()
+            flash('Team added successfully!', 'success')
+        except oracledb.Error as e:
+            flash(f'Error adding team: {str(e)}', 'error')
+        finally:
+            conn.close()
+    return redirect(url_for('index'))
+
 if __name__ == '__main__':
     app.run(debug=True, port=5000)

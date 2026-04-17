@@ -217,3 +217,107 @@ BEGIN
         ORDER BY total_bookings DESC;
 END get_top_event_locations;
 /
+
+CREATE OR REPLACE PROCEDURE add_new_installation (
+    p_name        IN VARCHAR2,
+    p_description IN VARCHAR2,
+    p_cost        IN NUMBER
+) IS
+BEGIN
+    INSERT INTO Installations VALUES (
+        Installation_t(p_name, p_description, p_cost)
+    );
+    COMMIT;
+EXCEPTION
+    WHEN OTHERS THEN
+        ROLLBACK;
+        RAISE_APPLICATION_ERROR(-20001, 'Error adding installation: ' || SQLERRM);
+END add_new_installation;
+/
+
+CREATE OR REPLACE PROCEDURE add_new_promo_installation (
+    p_name        IN VARCHAR2,
+    p_description IN VARCHAR2,
+    p_cost        IN NUMBER,
+    p_code        IN VARCHAR2,
+    p_discont     IN NUMBER,
+    p_deadline    IN DATE
+) IS
+BEGIN
+    INSERT INTO Installations VALUES (
+        Promo_t(p_name, p_description, p_cost, p_code, p_discont, p_deadline)
+    );
+    COMMIT;
+EXCEPTION
+    WHEN OTHERS THEN
+        ROLLBACK;
+        RAISE_APPLICATION_ERROR(-20001, 'Error adding promo installation: ' || SQLERRM);
+END add_new_promo_installation;
+/
+
+CREATE OR REPLACE PROCEDURE add_new_central_office (
+    p_name       IN VARCHAR2,
+    p_region     IN VARCHAR2,
+    p_province   IN VARCHAR2,
+    p_city       IN VARCHAR2,
+    p_address    IN VARCHAR2
+) IS
+BEGIN
+    INSERT INTO CentralOffices VALUES (
+        CentralOffice_t(p_name, 0, Location_t(p_region, p_province, p_city, p_address))
+    );
+    COMMIT;
+EXCEPTION
+    WHEN OTHERS THEN
+        ROLLBACK;
+        RAISE_APPLICATION_ERROR(-20001, 'Error adding central office: ' || SQLERRM);
+END add_new_central_office;
+/
+
+CREATE OR REPLACE PROCEDURE add_new_depot (
+    p_name                IN VARCHAR2,
+    p_region              IN VARCHAR2,
+    p_province            IN VARCHAR2,
+    p_city                IN VARCHAR2,
+    p_address             IN VARCHAR2,
+    p_central_office_name IN VARCHAR2,
+    p_municipalities      IN MunicipalityTable DEFAULT MunicipalityTable()
+) IS
+    v_co_ref REF CentralOffice_t;
+BEGIN
+    SELECT REF(c) INTO v_co_ref FROM CentralOffices c WHERE name = p_central_office_name;
+
+    INSERT INTO Depots VALUES (
+        Depot_t(p_name, 0, Location_t(p_region, p_province, p_city, p_address), p_municipalities, v_co_ref)
+    );
+    COMMIT;
+EXCEPTION
+    WHEN OTHERS THEN
+        ROLLBACK;
+        RAISE_APPLICATION_ERROR(-20001, 'Error adding depot: ' || SQLERRM);
+END add_new_depot;
+/
+
+CREATE OR REPLACE PROCEDURE add_new_team (
+    p_name       IN VARCHAR2,
+    p_depot_name IN VARCHAR2,
+    p_members    IN MembersVarray
+) IS
+    v_depot_ref REF Depot_t;
+BEGIN
+    SELECT REF(d) INTO v_depot_ref FROM Depots d WHERE name = p_depot_name;
+
+    INSERT INTO Teams (name, n_installations_made, depot, members) 
+    VALUES (
+        p_name,
+        0,
+        v_depot_ref,
+        p_members
+    );
+    COMMIT;
+EXCEPTION
+    WHEN OTHERS THEN
+        ROLLBACK;
+        RAISE_APPLICATION_ERROR(-20001, 'Error adding team: ' || SQLERRM);
+END add_new_team;
+/
