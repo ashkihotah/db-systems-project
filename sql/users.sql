@@ -1,0 +1,75 @@
+-- Allow creating users without the C## prefix in Oracle 21c if running on the CDB
+-- ALTER SESSION SET "_ORACLE_SCRIPT"=true;
+ALTER SYSTEM SET COMMON_USER_PREFIX='' SCOPE=SPFILE;
+
+DROP USER stageup_admin CASCADE;
+
+-- Create Stageup admin user
+CREATE USER stageup_admin 
+    IDENTIFIED BY "stageup_admin_password"
+    PROFILE "DEFAULT"
+    DEFAULT TABLESPACE "USERS"
+    TEMPORARY TABLESPACE "TEMP"
+    QUOTA UNLIMITED ON "USERS"
+    ACCOUNT UNLOCK;
+
+GRANT CONNECT TO stageup_admin ;
+GRANT CREATE SESSION TO stageup_admin;
+GRANT CREATE USER TO stageup_admin;
+GRANT UNLIMITED TABLESPACE TO stageup_admin;
+GRANT DROP TABLESPACE TO stageup_admin;
+GRANT ALTER TABLESPACE TO stageup_admin;
+GRANT CREATE TABLESPACE TO stageup_admin;
+
+GRANT READ ANY TABLE TO stageup_admin;
+GRANT SELECT ANY DICTIONARY TO stageup_admin;
+GRANT EXECUTE ANY OPERATOR TO stageup_admin;
+
+GRANT DROP ANY OPERATOR TO stageup_admin;
+GRANT ALTER ANY OPERATOR TO stageup_admin;
+GRANT CREATE ANY OPERATOR TO stageup_admin;
+GRANT CREATE OPERATOR TO stageup_admin;
+
+GRANT DROP ANY TYPE TO stageup_admin;
+GRANT ALTER ANY TYPE TO stageup_admin;
+GRANT CREATE ANY TYPE TO stageup_admin;
+GRANT CREATE TYPE TO stageup_admin;
+
+GRANT DROP ANY TRIGGER TO stageup_admin;
+GRANT ALTER ANY TRIGGER TO stageup_admin;
+GRANT CREATE ANY TRIGGER TO stageup_admin;
+GRANT CREATE TRIGGER TO stageup_admin;
+
+GRANT EXECUTE ANY PROCEDURE TO stageup_admin;
+GRANT DROP ANY PROCEDURE TO stageup_admin;
+GRANT ALTER ANY PROCEDURE TO stageup_admin;
+GRANT CREATE ANY PROCEDURE TO stageup_admin;
+GRANT CREATE PROCEDURE TO stageup_admin;
+
+GRANT DROP ANY SEQUENCE TO stageup_admin;
+GRANT ALTER ANY SEQUENCE TO stageup_admin;
+GRANT CREATE ANY SEQUENCE TO stageup_admin;
+GRANT CREATE SEQUENCE TO stageup_admin;
+
+GRANT DROP ANY VIEW TO stageup_admin;
+GRANT CREATE ANY VIEW TO stageup_admin;
+GRANT CREATE VIEW TO stageup_admin;
+
+GRANT DROP ANY SYNONYM TO stageup_admin;
+GRANT CREATE ANY SYNONYM TO stageup_admin;
+GRANT CREATE SYNONYM TO stageup_admin;
+
+GRANT DROP ANY INDEX TO stageup_admin;
+GRANT ALTER ANY INDEX TO stageup_admin;
+GRANT CREATE ANY INDEX TO stageup_admin;
+
+GRANT UPDATE ANY TABLE TO stageup_admin;
+GRANT INSERT ANY TABLE TO stageup_admin;
+GRANT SELECT ANY TABLE TO stageup_admin;
+GRANT DROP ANY TABLE TO stageup_admin;
+GRANT ALTER ANY TABLE TO stageup_admin;
+GRANT CREATE ANY TABLE TO stageup_admin;
+GRANT CREATE TABLE TO stageup_admin;
+
+commit;
+/
