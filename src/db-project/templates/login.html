@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Login - DB Project Dashboard</title>
+    <!-- Bootstrap 5 CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+    <style>
+        body { background-color: #f8f9fa; }
+        .login-card { max-width: 500px; margin: auto; }
+    </style>
+</head>
+<body class="d-flex align-items-center py-4 text-center pb-5" style="height: 100vh;">
+
+    <div class="container login-card pt-5">
+        <h1 class="display-6 mb-4 fw-bold">Login</h1>
+        
+        {% with messages = get_flashed_messages(with_categories=true) %}
+          {% if messages %}
+            {% for category, message in messages %}
+              <div class="alert alert-{% if category == 'error' %}danger{% else %}{{ category }}{% endif %} alert-dismissible fade show" role="alert">
+                {{ message }}
+                <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+              </div>
+            {% endfor %}
+          {% endif %}
+        {% endwith %}
+
+        <div class="card shadow-sm border-0 mb-4 text-start">
+            <div class="card-header bg-white border-bottom-0 pt-4">
+                <h4 class="text-primary"><i class="bi bi-person"></i> Customer Login</h4>
+            </div>
+            <div class="card-body">
+                <form action="{{ url_for('login') }}" method="POST">
+                    <div class="mb-3">
+                        <label class="form-label text-muted small fw-bold">Customer Code</label>
+                        <input type="text" name="customer_code" class="form-control" placeholder="E.g., C001">
+                    </div>
+                    <button type="submit" name="customer_login" class="btn btn-primary w-100">Login as Customer</button>
+                    <hr>
+                    <p class="text-muted small mb-2">Want to register as a new customer instead?</p>
+                    <div class="d-flex gap-2">
+                        <button type="button" class="btn btn-outline-secondary btn-sm w-50" data-bs-toggle="collapse" data-bs-target="#registerInd">Individual</button>
+                        <button type="button" class="btn btn-outline-secondary btn-sm w-50" data-bs-toggle="collapse" data-bs-target="#registerComp">Company</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        <div class="collapse mb-4 text-start" id="registerInd">
+            <div class="card shadow-sm border-0">
+                <div class="card-body">
+                    <h5 class="card-title text-secondary">Register Individual</h5>
+                    <form action="/add_individual_customer" method="POST">
+                        <input type="text" name="code" class="form-control mb-2" placeholder="Code (e.g. C002)" required>
+                        <input type="text" name="name" class="form-control mb-2" placeholder="Name" required>
+                        <input type="text" name="surname" class="form-control mb-2" placeholder="Surname" required>
+                        <input type="date" name="dob" class="form-control mb-2" required>
+                        <input type="text" name="gender" class="form-control mb-2" placeholder="Gender" required>
+                        <input type="email" name="email" class="form-control mb-2" placeholder="Email">
+                        <input type="text" name="phone" class="form-control mb-2" placeholder="Phone">
+                        <button type="submit" class="btn btn-secondary w-100">Register</button>
+                    </form>
+                </div>
+            </div>
+        </div>
+
+        <div class="collapse mb-4 text-start" id="registerComp">
+            <div class="card shadow-sm border-0">
+                <div class="card-body">
+                    <h5 class="card-title text-success">Register Company</h5>
+                    <form action="/add_company_customer" method="POST">
+                        <input type="text" name="code" class="form-control mb-2" placeholder="Code (e.g. C003)" required>
+                        <input type="text" name="company_name" class="form-control mb-2" placeholder="Company Name" required>
+                        <input type="text" name="vat_number" class="form-control mb-2" placeholder="VAT Number" required>
+                        <input type="email" name="email" class="form-control mb-2" placeholder="Email">
+                        <input type="text" name="phone" class="form-control mb-2" placeholder="Phone">
+                        <button type="submit" class="btn btn-success w-100">Register</button>
+                    </form>
+                </div>
+            </div>
+        </div>
+
+        <div class="card shadow-sm border-0 text-start">
+            <div class="card-header bg-white border-bottom-0 pt-4">
+                <h4 class="text-dark"><i class="bi bi-briefcase"></i> Manager Login</h4>
+            </div>
+            <div class="card-body">
+                <form action="{{ url_for('login') }}" method="POST">
+                    <button type="submit" name="manager_login" class="btn btn-dark w-100">Login as Manager</button>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>

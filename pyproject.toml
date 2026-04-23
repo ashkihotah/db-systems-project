@@ -5,10 +5,9 @@ description = "A population script for the database using Faker"
 readme = "README_populate.md"
 requires-python = ">=3.8"
 dependencies = [
-    "Faker",
     "flask",
     "oracledb",
-    "dotenv"
+    "dotenv",
 ]
 
 # [build-system]
